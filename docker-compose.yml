@@ -1,0 +1,23 @@
+services:
+  telethon-reader:
+    build: .
+    restart: unless-stopped
+
+    environment:
+      TG_API_ID: ${TG_API_ID}
+      TG_API_HASH: ${TG_API_HASH}
+      TG_CHANNEL: ${TG_CHANNEL}
+      TG_SESSION: ${TG_SESSION}
+      PROXY_HOST: ${PROXY_HOST}
+      PROXY_PORT: ${PROXY_PORT}
+      PROXY_USER: ${PROXY_USER}
+      PROXY_PASS: ${PROXY_PASS}
+
+    volumes:
+      - telethon_sessions:/app/sessions
+
+    command: python reader.py
+
+volumes:
+  telethon_sessions:
+    name: telethon_sessions
