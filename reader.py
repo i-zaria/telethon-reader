@@ -7,7 +7,10 @@ API_ID = int(os.environ["TG_API_ID"])
 API_HASH = os.environ["TG_API_HASH"]
 SESSION = os.environ.get("TG_SESSION", "/app/sessions/main")
 CHANNEL = os.environ["TG_CHANNEL"]
-N8N_WEBHOOK_URL = os.environ["N8N_WEBHOOK_URL"]
+
+N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
+if not N8N_WEBHOOK_URL:
+    raise RuntimeError("N8N_WEBHOOK_URL is missing or empty")
 
 PROXY_HOST = os.environ["PROXY_HOST"]
 PROXY_PORT = int(os.environ["PROXY_PORT"])
