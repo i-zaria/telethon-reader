@@ -12,6 +12,7 @@ services:
       PROXY_PORT: ${PROXY_PORT}
       PROXY_USER: ${PROXY_USER}
       PROXY_PASS: ${PROXY_PASS}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}
 
     volumes:
       - telethon_sessions:/app/sessions
