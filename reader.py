@@ -1,7 +1,9 @@
 import os
 import asyncio
 import requests
+
 from telethon import TelegramClient, events
+from telethon.tl.functions.channels import GetFullChannelRequest
 
 def require_env(name: str) -> str:
     value = os.environ.get(name)
@@ -31,8 +33,26 @@ proxy = {
 
 client = TelegramClient(SESSION, API_ID, API_HASH, proxy=proxy)
 
-def build_payload(event, event_type: str) -> dict:
+_cached_channel_entity = None
+
+async def get_channel_entity():
+    global _cached_channel_entity
+    if _cached_channel_entity is None:
+        _cached_channel_entity = await client.get_entity(CHANNEL)
+    return _cached_channel_entity
+
+async def get_subscribers_count():
+    try:
+        channel_entity = await get_channel_entity()
+        full = await client(GetFullChannelRequest(channel_entity))
+        return getattr(full.full_chat, "participants_count", None)
+    except Exception as e:
+        print(f"[SUBSCRIBERS_ERROR] error={e}")
+        return None
+
+def build_payload(event, event_type: str, subscribers_at_publish=None) -> dict:
     message = event.message
+
     return {
         "event_type": event_type,
         "source": "telethon",
@@ -49,6 +69,7 @@ def build_payload(event, event_type: str) -> dict:
         "forwards": getattr(message, "forwards", None),
         "grouped_id": getattr(message, "grouped_id", None),
         "has_media": message.media is not None,
+        "subscribers_at_publish": subscribers_at_publish,
     }
 
 def send_webhook(payload: dict) -> None:
@@ -81,22 +102,36 @@ def send_webhook(payload: dict) -> None:
 
 @client.on(events.NewMessage(chats=CHANNEL))
 async def on_new_message(event):
-    payload = build_payload(event, "message_new")
+    subscribers_count = await get_subscribers_count()
+    payload = build_payload(
+        event=event,
+        event_type="message_new",
+        subscribers_at_publish=subscribers_count
+    )
+
     print(
         f"[NEW] chat_id={payload['chat_id']} "
         f"message_id={payload['message_id']} "
+        f"subscribers_at_publish={payload['subscribers_at_publish']} "
         f"text={payload['text'][:120]!r}"
     )
+
     send_webhook(payload)
 
 @client.on(events.MessageEdited(chats=CHANNEL))
 async def on_message_edited(event):
-    payload = build_payload(event, "message_edited")
+    payload = build_payload(
+        event=event,
+        event_type="message_edited",
+        subscribers_at_publish=None
+    )
+
     print(
         f"[EDIT] chat_id={payload['chat_id']} "
         f"message_id={payload['message_id']} "
         f"text={payload['text'][:120]!r}"
     )
+
     send_webhook(payload)
 
 async def main():
@@ -114,6 +149,13 @@ async def main():
         f"username={me.username} "
         f"phone={me.phone}"
     )
+
+    channel_entity = await get_channel_entity()
+    print(
+        f"[CHANNEL_OK] id={getattr(channel_entity, 'id', None)} "
+        f"title={getattr(channel_entity, 'title', None)}"
+    )
+
     print("[LISTENING] Waiting for new and edited channel posts")
 
     await client.run_until_disconnected()
