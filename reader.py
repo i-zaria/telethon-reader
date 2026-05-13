@@ -4,6 +4,7 @@ import requests
 
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import GetFullChannelRequest
+from telethon.tl.types import Channel
 
 def require_env(name: str) -> str:
     value = os.environ.get(name)
@@ -50,7 +51,20 @@ async def get_subscribers_count():
         print(f"[SUBSCRIBERS_ERROR] error={e}")
         return None
 
-def build_payload(event, event_type: str, subscribers_at_publish=None) -> dict:
+def build_message_link(channel_entity, message_id: int):
+    try:
+        if isinstance(channel_entity, Channel) and getattr(channel_entity, "username", None):
+            return f"https://t.me/{channel_entity.username}/{message_id}"
+
+        if isinstance(channel_entity, Channel):
+            return f"https://t.me/c/{channel_entity.id}/{message_id}"
+
+        return None
+    except Exception as e:
+        print(f"[MESSAGE_LINK_ERROR] message_id={message_id} error={e}")
+        return None
+
+def build_payload(event, event_type: str, subscribers_at_publish=None, message_link=None) -> dict:
     message = event.message
 
     return {
@@ -59,6 +73,7 @@ def build_payload(event, event_type: str, subscribers_at_publish=None) -> dict:
         "channel": CHANNEL,
         "chat_id": event.chat_id,
         "message_id": message.id,
+        "message_link": message_link,
         "date": message.date.isoformat() if message.date else None,
         "edit_date": message.edit_date.isoformat() if message.edit_date else None,
         "text": message.message or "",
@@ -102,17 +117,22 @@ def send_webhook(payload: dict) -> None:
 
 @client.on(events.NewMessage(chats=CHANNEL))
 async def on_new_message(event):
+    channel_entity = await get_channel_entity()
     subscribers_count = await get_subscribers_count()
+    message_link = build_message_link(channel_entity, event.message.id)
+
     payload = build_payload(
         event=event,
         event_type="message_new",
-        subscribers_at_publish=subscribers_count
+        subscribers_at_publish=subscribers_count,
+        message_link=message_link
     )
 
     print(
         f"[NEW] chat_id={payload['chat_id']} "
         f"message_id={payload['message_id']} "
         f"subscribers_at_publish={payload['subscribers_at_publish']} "
+        f"message_link={payload['message_link']} "
         f"text={payload['text'][:120]!r}"
     )
 
@@ -120,15 +140,20 @@ async def on_new_message(event):
 
 @client.on(events.MessageEdited(chats=CHANNEL))
 async def on_message_edited(event):
+    channel_entity = await get_channel_entity()
+    message_link = build_message_link(channel_entity, event.message.id)
+
     payload = build_payload(
         event=event,
         event_type="message_edited",
-        subscribers_at_publish=None
+        subscribers_at_publish=None,
+        message_link=message_link
     )
 
     print(
         f"[EDIT] chat_id={payload['chat_id']} "
         f"message_id={payload['message_id']} "
+        f"message_link={payload['message_link']} "
         f"text={payload['text'][:120]!r}"
     )
 
@@ -153,7 +178,8 @@ async def main():
     channel_entity = await get_channel_entity()
     print(
         f"[CHANNEL_OK] id={getattr(channel_entity, 'id', None)} "
-        f"title={getattr(channel_entity, 'title', None)}"
+        f"title={getattr(channel_entity, 'title', None)} "
+        f"username={getattr(channel_entity, 'username', None)}"
     )
 
     print("[LISTENING] Waiting for new and edited channel posts")
